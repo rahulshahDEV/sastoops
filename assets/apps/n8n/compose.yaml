@@ -4,7 +4,8 @@ services:
     restart: unless-stopped
     ports:
       - "{{.Port}}:5678"
-    environment:
+    {{if Param "mem_limit"}}mem_limit: {{Param "mem_limit"}}
+    {{end}}environment:
       N8N_HOST: "{{.Domain}}"
       N8N_PORT: "5678"
       N8N_PROTOCOL: "{{Env "N8N_PROTOCOL"}}"

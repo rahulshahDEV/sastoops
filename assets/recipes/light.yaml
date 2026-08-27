@@ -1,0 +1,10 @@
+name: light
+version: "1.0"
+description: Optimize for small/low-RAM VPS — swap, swappiness, capped logs
+steps:
+  - id: swap
+    module: swap
+    params: {size: "1G"}
+  - id: light-tune
+    module: light-tune
+    description: low-RAM tuning (swappiness, journald cap, docker log rotation)

@@ -6,9 +6,14 @@ homepage: https://n8n.io
 requirements:
   os: [ubuntu, debian]
   arch: [amd64, arm64]
-  min_ram: 512Mi
+  min_ram: 384Mi
   min_disk: 2Gi
   ports_free: [5678]
+params:
+  - name: tz
+    default: UTC
+  - name: mem_limit
+    default: ""
 env:
   - name: N8N_HOST
     from: domain

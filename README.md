@@ -2,28 +2,32 @@
 
 **SastoHost ServerOps** — lightweight, agentless server management CLI in Go.
 
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Go](https://img.shields.io/badge/go-1.21+-00ADD8.svg)](go.mod)
+
 Manage any Linux VPS from your terminal: provision, harden, deploy apps, back up to S3-compatible storage (Wasabi / Cloudflare R2 / Backblaze B2), and monitor — all over plain SSH. No agents, no daemons, no runtime dependencies. Single static binary.
 
 ## Install
 
 ```bash
-go install github.com/rahulshahDEV/sastoops@latest
-# or build from source
-make build
+curl -fsSL https://raw.githubusercontent.com/rahulshahDEV/sastoops/main/scripts/install.sh | sh
+# fallback (any OS with Go): go install github.com/rahulshahDEV/sastoops@latest
 ```
+
+That's it — single ~9MB static binary, no Python/Node/Docker/runtime needed on your machine, nothing installed on the server (agentless, SSH only).
 
 ## Quick start
 
 ```bash
-# 1. Import an existing VPS (works with any provider)
-sastoops server add my-vps root@1.2.3.4 --test
+# 1. On a fresh VPS — register the machine you're on (auto-detects IP/user/key)
+sastoops self
 
-# 2. Harden it (idempotent, safe to re-run; --check to dry-run)
+# 2. Harden it + install Docker (idempotent, safe to re-run; --check to dry-run)
 sastoops server setup my-vps
 
 # 3. Install apps
 sastoops app install n8n my-vps --domain n8n.example.com
-sastoops app install minecraft my-vps --set memory=4G
+sastoops app install minecraft my-vps --set memory=1G
 
 # 4. Backups -> Wasabi / R2 / B2 (restic, encrypted)
 sastoops backup setup my-vps --provider wasabi --bucket sastoops-backups --key-id AKIA... --secret ...
@@ -31,6 +35,23 @@ sastoops backup setup my-vps --provider wasabi --bucket sastoops-backups --key-i
 # 5. Check everything
 sastoops status my-vps
 ```
+
+## Small VPS friendly
+
+sastoops itself needs **nothing on the server** (it's just SSH), so it runs fine on the smallest droplets/VPS — even 512Mi / 1 vCPU / 20Gi disk. To keep such boxes healthy:
+
+```bash
+sastoops recipe apply light my-vps   # swap 1G + swappiness=10 + journald cap + docker log rotation
+```
+
+| App | Minimum RAM | Notes |
+|---|---|---|
+| n8n | 384Mi | add `--set mem_limit=512m` to cap it |
+| minecraft | 2Gi | `--set memory=1G` for small worlds |
+| appwrite | 4Gi | hard gate + warning before install |
+| supabase | 4Gi | hard gate + warning before install |
+
+Docker is installed with log rotation (`max-size 10m, max-file 3`) by default so small disks never fill up with logs.
 
 ## Command groups
 
@@ -103,4 +124,22 @@ Phase 3: web UI/API, teams/RBAC, SastoHost cloud integration.
 
 ## License
 
-© SastoHost (https://sasto.host). Open-source project under active development.# sastoops
+© SastoHost (https://sasto.host). Open-source project under active development.
+
+## Documentation
+
+| Doc | Contents |
+|---|---|
+| [INSTALL.md](docs/INSTALL.md) | zero-dependency install, upgrade, troubleshooting |
+| [CLI.md](docs/CLI.md) | full command reference + global flags + exit codes |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | how it works, state layout, command flows |
+| [DESIGN.md](docs/DESIGN.md) | the original A–N technical design |
+| [APPS.md](docs/APPS.md) | authoring guide: app schema + compose templates |
+| [RECIPES.md](docs/RECIPES.md) | authoring guide: recipes + idempotent modules |
+| [BACKUPS.md](docs/BACKUPS.md) | restic/rclone engines, DB dumps, restore |
+| [SECURITY.md](SECURITY.md) | security model + vulnerability reporting |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | how to contribute (apps, modules, providers) |
+
+## License
+
+Apache-2.0 — see [LICENSE](LICENSE). © 2026 SastoHost (https://sasto.host).# sastoops

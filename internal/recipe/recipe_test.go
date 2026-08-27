@@ -69,6 +69,20 @@ func TestModuleVersionStable(t *testing.T) {
 	}
 }
 
+func TestLightRecipeForSmallVPS(t *testing.T) {
+	r, err := Load("light")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mods := map[string]bool{}
+	for _, s := range r.Steps {
+		mods[s.Module] = true
+	}
+	if !mods["light-tune"] || !mods["swap"] {
+		t.Errorf("light recipe must include light-tune and swap modules: %v", mods)
+	}
+}
+
 func TestBuildEnv(t *testing.T) {
 	out := buildEnv(map[string]string{"allow": "22,80", "tz": "UTC"})
 	if !strings.Contains(out, "SERVEROPS_ALLOW=\"22,80\"") {
