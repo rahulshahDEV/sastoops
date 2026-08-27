@@ -10,7 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const Version = "0.1.0"
+const Version = "0.2.0"
 
 type Config struct {
 	Global    GlobalConfig            `yaml:"global"`
