@@ -2,4 +2,4 @@
 /dist/
 *.test
 *.out
-sastoops
+sastoops.DS_Store
