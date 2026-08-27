@@ -1,0 +1,40 @@
+name: n8n
+version: "1.0"
+category: automation
+description: Fair-code workflow automation platform
+homepage: https://n8n.io
+requirements:
+  os: [ubuntu, debian]
+  arch: [amd64, arm64]
+  min_ram: 512Mi
+  min_disk: 2Gi
+  ports_free: [5678]
+env:
+  - name: N8N_HOST
+    from: domain
+  - name: N8N_PORT
+    default: "5678"
+  - name: N8N_PROTOCOL
+    default: https
+  - name: N8N_ENCRYPTION_KEY
+    secret: true
+ports: [5678]
+volumes: [n8n_data]
+proxy:
+  enabled: true
+  port: 5678
+  tls: true
+healthcheck:
+  type: http
+  url: http://localhost:5678/healthz
+  interval: 5s
+  retries: 30
+lifecycle:
+  pre_update: [backup]
+backup:
+  databases: []
+  resources:
+    - type: volume
+      name: n8n_data
+    - type: file
+      path: /var/lib/serverops/compose/n8n/.env

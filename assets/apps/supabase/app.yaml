@@ -1,0 +1,50 @@
+name: supabase
+version: "1.0"
+category: backend
+description: Open-source Firebase alternative (Postgres, Auth, Realtime, Storage)
+homepage: https://supabase.com
+requirements:
+  os: [ubuntu, debian]
+  arch: [amd64, arm64]
+  min_ram: 4Gi
+  min_disk: 10Gi
+  ports_free: [8000]
+env:
+  - name: POSTGRES_PASSWORD
+    secret: true
+  - name: JWT_SECRET
+    secret: true
+  - name: ANON_KEY
+    secret: true
+  - name: SERVICE_ROLE_KEY
+    secret: true
+  - name: DASHBOARD_USERNAME
+    default: admin
+  - name: DASHBOARD_PASSWORD
+    secret: true
+ports: [8000]
+volumes: [supabase_db, supabase_storage, supabase_config]
+proxy:
+  enabled: true
+  port: 8000
+  tls: true
+healthcheck:
+  type: http
+  url: http://localhost:8000/auth/v1/health
+  interval: 10s
+  retries: 60
+lifecycle:
+  pre_update: [backup]
+backup:
+  databases:
+    - type: postgres
+      container: supabase-db
+      user: postgres
+      password_ref: POSTGRES_PASSWORD
+      db: postgres
+      name: supabase
+  resources:
+    - type: volume
+      name: supabase_storage
+    - type: volume
+      name: supabase_config

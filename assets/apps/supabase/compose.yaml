@@ -1,0 +1,123 @@
+services:
+  kong:
+    image: kong:2.8.1
+    restart: unless-stopped
+    ports:
+      - "{{.Port}}:8000"
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /home/kong/kong.yml
+      KONG_DNS_ORDER: LAST,A,CNAME
+      KONG_PLUGINS: request-transformer,cors,key-auth,go-api-key-auth
+      KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
+      KONG_NGINX_PROXY_PROXY_BUFFERS: "64 160k"
+    volumes:
+      - supabase_config:/home/kong
+{{if .Proxy}}
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.supabase.rule=Host(`{{.Domain}}`)"
+      - "traefik.http.routers.supabase.entrypoints=websecure"
+      - "traefik.http.routers.supabase.tls=true"
+      - "traefik.http.routers.supabase.tls.certresolver=letsencrypt"
+      - "traefik.http.services.supabase.loadbalancer.server.port={{.ProxyPort}}"
+{{end}}
+  auth:
+    image: supabase/gotrue:v2.161.0
+    restart: unless-stopped
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: "postgres://supabase_auth_admin:{{Env "POSTGRES_PASSWORD"}}@db:5432/postgres"
+      GOTRUE_SITE_URL: "https://{{.Domain}}"
+      GOTRUE_JWT_SECRET: "{{Env "JWT_SECRET"}}"
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_ANON_KEY: "{{Env "ANON_KEY"}}"
+      GOTRUE_SERVICE_ROLE_KEY: "{{Env "SERVICE_ROLE_KEY"}}"
+    depends_on:
+      - db
+  rest:
+    image: postgrest/postgrest:v12.2.3
+    restart: unless-stopped
+    environment:
+      PGRST_DB_URI: "postgres://authenticator:{{Env "POSTGRES_PASSWORD"}}@db:5432/postgres"
+      PGRST_DB_SCHEMAS: public,storage,graphql_public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      PGRST_JWT_SECRET: "{{Env "JWT_SECRET"}}"
+    depends_on:
+      - db
+  realtime:
+    image: supabase/realtime:v2.30.18
+    restart: unless-stopped
+    environment:
+      PORT: 4000
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: supabase_realtime_admin
+      DB_PASSWORD: "{{Env "POSTGRES_PASSWORD"}}"
+      DB_NAME: postgres
+      JWT_SECRET: "{{Env "JWT_SECRET"}}"
+      SECRET_KEY_BASE: "{{Env "JWT_SECRET"}}"
+    depends_on:
+      - db
+  storage:
+    image: supabase/storage-api:v1.12.0
+    restart: unless-stopped
+    environment:
+      ANON_KEY: "{{Env "ANON_KEY"}}"
+      SERVICE_KEY: "{{Env "SERVICE_ROLE_KEY"}}"
+      POSTGREST_URL: http://rest:3000
+      PGRST_JWT_SECRET: "{{Env "JWT_SECRET"}}"
+      DATABASE_URL: "postgres://supabase_storage_admin:{{Env "POSTGRES_PASSWORD"}}@db:5432/postgres"
+      FILE_SIZE_LIMIT: 52428800
+      STORAGE_BACKEND: file
+      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
+      REGION: us-east-1
+      GLOBAL_S3_ENDPOINT: ""
+    volumes:
+      - supabase_storage:/var/lib/storage
+    depends_on:
+      - db
+      - rest
+  meta:
+    image: supabase/postgres-meta:v0.84.2
+    restart: unless-stopped
+    environment:
+      PG_META_PORT: 8080
+      PG_META_DB_HOST: db
+      PG_META_DB_PORT: "5432"
+      PG_META_DB_NAME: postgres
+      PG_META_DB_USER: supabase_admin
+      PG_META_DB_PASSWORD: "{{Env "POSTGRES_PASSWORD"}}"
+    depends_on:
+      - db
+  studio:
+    image: supabase/studio:20240826-27d9b09
+    restart: unless-stopped
+    environment:
+      STUDIO_PG_META_URL: http://meta:8080
+      SUPABASE_PUBLIC_URL: "https://{{.Domain}}"
+      SUPABASE_ANON_KEY: "{{Env "ANON_KEY"}}"
+      SUPABASE_SERVICE_KEY: "{{Env "SERVICE_ROLE_KEY"}}"
+      AUTHENTICATE_USERS_BY_USERNAME: "true"
+      STUDIO_USERNAME: "{{Env "DASHBOARD_USERNAME"}}"
+      STUDIO_PASSWORD: "{{Env "DASHBOARD_PASSWORD"}}"
+    depends_on:
+      - meta
+  db:
+    image: supabase/postgres:15.1.1.121
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: "{{Env "POSTGRES_PASSWORD"}}"
+      POSTGRES_DB: postgres
+      PGDATA: /var/lib/postgresql/data
+    volumes:
+      - supabase_db:/var/lib/postgresql/data
+volumes:
+  supabase_db:
+  supabase_storage:
+  supabase_config:

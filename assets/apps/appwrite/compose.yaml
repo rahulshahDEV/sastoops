@@ -1,0 +1,84 @@
+services:
+  appwrite:
+    image: appwrite/appwrite:{{.Version}}
+    restart: unless-stopped
+    ports:
+      - "{{.Port}}:80"
+    environment:
+      _APP_ENV: "{{Env "APP_ENV"}}"
+      _APP_DOMAIN: "{{.Domain}}"
+      _APP_DOMAIN_TARGET: "{{.Domain}}"
+      _APP_OPTIONS_ABUSE: enabled
+      _APP_OPENSSL_KEY_V1: "{{Env "APP_OPENSSL_KEY"}}"
+      _APP_DB_HOST: mariadb
+      _APP_DB_PORT: "3306"
+      _APP_DB_SCHEMA: "{{Env "DB_DATABASE"}}"
+      _APP_DB_USER: "{{Env "DB_USER"}}"
+      _APP_DB_PASS: "{{Env "DB_PASSWORD"}}"
+      _APP_REDIS_HOST: redis
+      _APP_REDIS_PORT: "6379"
+      _APP_REDIS_USER: default
+      _APP_REDIS_PASS: "{{Env "REDIS_PASSWORD"}}"
+      _APP_INFLUXDB_HOST: influxdb
+      _APP_INFLUXDB_PORT: "8086"
+      _APP_INFLUXDB_ORG: appwrite
+      _APP_INFLUXDB_BUCKET: appwrite
+      _APP_INFLUXDB_TOKEN: "{{Env "INFLUXDB_TOKEN"}}"
+      _APP_SMTP_HOST: "{{Env "SMTP_HOST"}}"
+      _APP_SMTP_PORT: "{{Env "SMTP_PORT"}}"
+      _APP_SMTP_USERNAME: "{{Env "SMTP_USERNAME"}}"
+      _APP_SMTP_PASSWORD: "{{Env "SMTP_PASSWORD"}}"
+      _APP_SMTP_SECURE: ""
+    depends_on:
+      - mariadb
+      - redis
+      - influxdb
+    volumes:
+      - appwrite_uploads:/storage/uploads
+      - appwrite_cache:/storage/cache
+      - appwrite_config:/storage/config
+      - appwrite_functions:/storage/functions
+{{if .Proxy}}
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.appwrite.rule=Host(`{{.Domain}}`)"
+      - "traefik.http.routers.appwrite.entrypoints=websecure"
+      - "traefik.http.routers.appwrite.tls=true"
+      - "traefik.http.routers.appwrite.tls.certresolver=letsencrypt"
+      - "traefik.http.services.appwrite.loadbalancer.server.port={{.ProxyPort}}"
+{{end}}
+  mariadb:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "{{Env "DB_PASSWORD"}}"
+      MYSQL_DATABASE: "{{Env "DB_DATABASE"}}"
+      MYSQL_USER: "{{Env "DB_USER"}}"
+      MYSQL_PASSWORD: "{{Env "DB_PASSWORD"}}"
+    volumes:
+      - appwrite_mariadb:/var/lib/mysql
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --requirepass "{{Env "REDIS_PASSWORD"}}"
+    volumes:
+      - appwrite_redis:/data
+  influxdb:
+    image: influxdb:1.8-alpine
+    restart: unless-stopped
+    environment:
+      INFLUXDB_DB: appwrite
+      INFLUXDB_ADMIN_USER: admin
+      INFLUXDB_ADMIN_PASSWORD: "{{Env "INFLUXDB_TOKEN"}}"
+    volumes:
+      - appwrite_influx:/var/lib/influxdb
+volumes:
+  appwrite_uploads:
+  appwrite_cache:
+  appwrite_config:
+  appwrite_functions:
+  appwrite_mariadb:
+  appwrite_redis:
+  appwrite_influx:

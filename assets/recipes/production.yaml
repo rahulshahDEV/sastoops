@@ -1,0 +1,11 @@
+name: production
+version: "1.0"
+description: Production profile — base + reverse proxy with automatic SSL
+extends: base
+params:
+  traefik_email: ops@sastohost.com
+steps:
+  - id: traefik
+    module: traefik
+    params: {email: "{{param traefik_email}}"}
+    description: Traefik reverse proxy + Let's Encrypt

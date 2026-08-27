@@ -1,0 +1,29 @@
+name: base
+version: "1.0"
+description: Base server setup — updates, hardening, firewall, Docker
+steps:
+  - id: apt-update
+    module: apt-update
+    description: system updates
+  - id: timezone
+    module: timezone
+    params: {tz: UTC}
+  - id: swap
+    module: swap
+    params: {size: "2G"}
+  - id: admin-user
+    module: admin-user
+    params: {user: admin}
+    description: non-root admin + SSH key
+  - id: ssh-hardening
+    module: ssh-hardening
+    description: key-only SSH (verified safe)
+  - id: firewall
+    module: firewall
+    params: {allow: "22,80,443"}
+  - id: fail2ban
+    module: fail2ban
+  - id: unattended
+    module: unattended-upgrades
+  - id: docker
+    module: docker

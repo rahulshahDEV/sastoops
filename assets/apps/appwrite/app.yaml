@@ -1,0 +1,60 @@
+name: appwrite
+version: "1.0"
+category: backend
+description: Open-source backend server (auth, database, storage, functions)
+homepage: https://appwrite.io
+requirements:
+  os: [ubuntu, debian]
+  arch: [amd64, arm64]
+  min_ram: 4Gi
+  min_disk: 10Gi
+  ports_free: [80]
+env:
+  - name: APP_ENV
+    default: production
+  - name: APP_OPENSSL_KEY
+    secret: true
+  - name: DB_PASSWORD
+    secret: true
+  - name: DB_USER
+    default: appwrite
+  - name: DB_DATABASE
+    default: appwrite
+  - name: REDIS_PASSWORD
+    secret: true
+  - name: INFLUXDB_TOKEN
+    secret: true
+  - name: SMTP_HOST
+    default: ""
+  - name: SMTP_PORT
+    default: "587"
+  - name: SMTP_USERNAME
+    default: ""
+  - name: SMTP_PASSWORD
+    secret: true
+ports: [80]
+volumes: [appwrite_uploads, appwrite_cache, appwrite_config, appwrite_functions]
+proxy:
+  enabled: true
+  port: 80
+  tls: true
+healthcheck:
+  type: http
+  url: http://localhost/health
+  interval: 10s
+  retries: 60
+lifecycle:
+  pre_update: [backup]
+backup:
+  databases:
+    - type: mariadb
+      container: appwrite-mariadb
+      user: "{{.Env "DB_USER"}}"
+      password_ref: DB_PASSWORD
+      db: "{{.Env "DB_DATABASE"}}"
+      name: appwrite
+  resources:
+    - type: volume
+      name: appwrite_uploads
+    - type: volume
+      name: appwrite_config

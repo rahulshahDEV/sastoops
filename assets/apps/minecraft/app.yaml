@@ -1,0 +1,34 @@
+name: minecraft
+version: "1.0"
+category: gaming
+description: Minecraft Java server (paper/vanilla/forge via itzg image)
+homepage: https://github.com/itzg/docker-minecraft-server
+requirements:
+  os: [ubuntu, debian]
+  arch: [amd64, arm64]
+  min_ram: 2Gi
+  min_disk: 5Gi
+  ports_free: [25565]
+params:
+  - name: type
+    default: paper
+  - name: memory
+    default: 2G
+  - name: online_mode
+    default: "true"
+env: []
+ports: [25565]
+volumes: [mc_data]
+proxy:
+  enabled: false
+healthcheck:
+  type: tcp
+  port: 25565
+  retries: 60
+lifecycle:
+  pre_update: [backup]
+backup:
+  databases: []
+  resources:
+    - type: volume
+      name: mc_data

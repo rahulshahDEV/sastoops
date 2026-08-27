@@ -1,0 +1,27 @@
+services:
+  n8n:
+    image: n8nio/n8n:{{.Version}}
+    restart: unless-stopped
+    ports:
+      - "{{.Port}}:5678"
+    environment:
+      N8N_HOST: "{{.Domain}}"
+      N8N_PORT: "5678"
+      N8N_PROTOCOL: "{{Env "N8N_PROTOCOL"}}"
+      N8N_ENCRYPTION_KEY: "{{Env "N8N_ENCRYPTION_KEY"}}"
+      GENERIC_TIMEZONE: "{{Param "tz"}}"
+    volumes:
+      - n8n_data:/home/node/.n8n
+{{if .Proxy}}
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.n8n.rule=Host(`{{.Domain}}`)"
+      - "traefik.http.routers.n8n.entrypoints=websecure"
+      - "traefik.http.routers.n8n.tls=true"
+      - "traefik.http.routers.n8n.tls.certresolver=letsencrypt"
+      - "traefik.http.services.n8n.loadbalancer.server.port={{.ProxyPort}}"
+{{end}}
+volumes:
+  n8n_data:
