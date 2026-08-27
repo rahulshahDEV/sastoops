@@ -3,3 +3,5 @@
 *.test
 *.out
 sastoops.DS_Store
+
+.DS_Store
