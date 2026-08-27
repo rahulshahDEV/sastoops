@@ -85,6 +85,16 @@ var backupSetupCmd = &cobra.Command{
 		appsList, _ := cmd.Flags().GetStringSlice("apps")
 		schedule, _ := cmd.Flags().GetString("schedule")
 
+		// beginner-friendly prompts when flags are missing
+		if bucket == "" {
+			bucket = ui.Prompt("Bucket name (create it in your provider first)", "")
+		}
+		if keyID == "" {
+			keyID = ui.Prompt("Access key id", "")
+		}
+		if secret == "" {
+			secret = ui.Prompt("Secret key", "")
+		}
 		if bucket == "" {
 			return fmt.Errorf("--bucket is required (e.g. sastoops-backups-%s)", serverName)
 		}
@@ -98,86 +108,90 @@ var backupSetupCmd = &cobra.Command{
 		if remoteName == "" {
 			remoteName = provider
 		}
-		remote := remoteName
-		prefix := serverName
-		repo := fmt.Sprintf("s3:%s", bucket)
-
 		client, _, err := dial(serverName)
 		if err != nil {
 			return err
 		}
 		defer client.Close()
+		return runBackupSetup(client, serverName, engine, provider, bucket, remoteName, keyID, secret, region, paths, appsList, schedule)
+	},
+}
 
-		ui.Step("installing %s engine", engine)
-		if err := backup.InstallEngine(client, engine); err != nil {
-			return err
-		}
-		ui.Ok("engine ready")
+// runBackupSetup is the shared backup configuration flow (command + wizard).
+func runBackupSetup(client *sshClient, serverName, engine, provider, bucket, remoteName, keyID, secret, region string, paths, appsList []string, schedule string) error {
+	remote := remoteName
+	prefix := serverName
+	repo := fmt.Sprintf("s3:%s", bucket)
 
-		if engine == "restic" {
-			env := backup.RenderResticEnv(keyID, secret, region)
-			endpoint := backup.Endpoint(provider)
-			if endpoint != "" {
-				repo = fmt.Sprintf("s3:%s/%s/%s", strings.TrimPrefix(endpoint, "https://"), bucket, prefix)
-			} else {
-				repo = fmt.Sprintf("s3:%s/%s", bucket, prefix)
-			}
-			if err := backup.WriteEnv(client, env); err != nil {
-				return err
-			}
-			ui.Step("initializing restic repository")
-			if err := backup.InitResticRepo(client, repo); err != nil {
-				return err
-			}
+	ui.Step("installing %s engine", engine)
+	if err := backup.InstallEngine(client, engine); err != nil {
+		return err
+	}
+	ui.Ok("engine ready")
+
+	if engine == "restic" {
+		env := backup.RenderResticEnv(keyID, secret, region)
+		endpoint := backup.Endpoint(provider)
+		if endpoint != "" {
+			repo = fmt.Sprintf("s3:%s/%s/%s", strings.TrimPrefix(endpoint, "https://"), bucket, prefix)
 		} else {
-			cfg := backup.RenderRcloneConfig(remote, provider, keyID, secret)
-			if err := client.Put([]byte(cfg), backup.RcloneCfg, "0600"); err != nil {
-				return err
-			}
-			ui.Step("testing rclone connectivity")
-			if err := backup.RcloneTest(client, remote); err != nil {
-				return err
-			}
-			ui.Ok("rclone remote %s reachable", remote)
+			repo = fmt.Sprintf("s3:%s/%s", bucket, prefix)
 		}
-
-		// collect app paths from installed apps
-		st, err := loadRemoteState(client, serverName)
-		if err != nil {
+		if err := backup.WriteEnv(client, env); err != nil {
 			return err
 		}
-		jobApps := appsList
-		jobPaths := append([]string{}, paths...)
-		if len(jobApps) == 0 {
-			for aName := range st.Apps {
-				jobApps = append(jobApps, aName)
-			}
-		}
-
-		jobs := &backup.Jobs{Engine: engine, Remote: remote, Repo: repo}
-		jobs.Jobs = []backup.JobSpec{{
-			Name:        "daily",
-			Apps:        jobApps,
-			Paths:       jobPaths,
-			Schedule:    schedule,
-			KeepLast:    7,
-			KeepDaily:   30,
-			KeepMonthly: 12,
-		}}
-		if err := backup.SaveJobs(client, jobs); err != nil {
+		ui.Step("initializing restic repository")
+		if err := backup.InitResticRepo(client, repo); err != nil {
 			return err
 		}
-		ui.Ok("jobs saved: %s (retention 7d/30d/12m)", serverName)
+	} else {
+		cfg := backup.RenderRcloneConfig(remote, provider, keyID, secret)
+		if err := client.Put([]byte(cfg), backup.RcloneCfg, "0600"); err != nil {
+			return err
+		}
+		ui.Step("testing rclone connectivity")
+		if err := backup.RcloneTest(client, remote); err != nil {
+			return err
+		}
+		ui.Ok("rclone remote %s reachable", remote)
+	}
 
-		if schedule != "" {
-			unit := fmt.Sprintf(`[Unit]
+	// collect app paths from installed apps
+	st, err := loadRemoteState(client, serverName)
+	if err != nil {
+		return err
+	}
+	jobApps := appsList
+	jobPaths := append([]string{}, paths...)
+	if len(jobApps) == 0 {
+		for aName := range st.Apps {
+			jobApps = append(jobApps, aName)
+		}
+	}
+
+	jobs := &backup.Jobs{Engine: engine, Remote: remote, Repo: repo}
+	jobs.Jobs = []backup.JobSpec{{
+		Name:        "daily",
+		Apps:        jobApps,
+		Paths:       jobPaths,
+		Schedule:    schedule,
+		KeepLast:    7,
+		KeepDaily:   30,
+		KeepMonthly: 12,
+	}}
+	if err := backup.SaveJobs(client, jobs); err != nil {
+		return err
+	}
+	ui.Ok("jobs saved: %s (retention 7d/30d/12m)", serverName)
+
+	if schedule != "" {
+		unit := fmt.Sprintf(`[Unit]
 Description=ServerOps backup %s
 [Service]
 Type=oneshot
 ExecStart=/bin/bash -c 'set -a; . /var/lib/serverops/secrets/backup.env; set +a; restic -r %s backup /var/lib/serverops --tag system 2>/dev/null || true'
 `, serverName, repo)
-			// systemd timer for the configured schedule
-			timer := fmt.Sprintf(`[Unit]
+		timer := fmt.Sprintf(`[Unit]
 Description=ServerOps backup timer %s
 [Timer]
 OnCalendar=%s
@@ -185,18 +199,17 @@ Persistent=true
 [Install]
 WantedBy=timers.target
 `, serverName, schedule)
-			if err := client.Put([]byte(unit), "/etc/systemd/system/serverops-backup.service", "0644"); err != nil {
-				return err
-			}
-			if err := client.Put([]byte(timer), "/etc/systemd/system/serverops-backup.timer", "0644"); err != nil {
-				return err
-			}
-			client.Output(`if [ "$(id -u)" -eq 0 ]; then S=''; else S='sudo -n'; fi; $S systemctl daemon-reload && $S systemctl enable --now serverops-backup.timer`)
-			ui.Ok("systemd timer installed: %s", schedule)
+		if err := client.Put([]byte(unit), "/etc/systemd/system/serverops-backup.service", "0644"); err != nil {
+			return err
 		}
-		ui.Info("next: sastoops backup run %s", serverName)
-		return nil
-	},
+		if err := client.Put([]byte(timer), "/etc/systemd/system/serverops-backup.timer", "0644"); err != nil {
+			return err
+		}
+		client.Output(`if [ "$(id -u)" -eq 0 ]; then S=''; else S='sudo -n'; fi; $S systemctl daemon-reload && $S systemctl enable --now serverops-backup.timer`)
+		ui.Ok("systemd timer installed: %s", schedule)
+	}
+	ui.Info("next: sastoops backup run %s", serverName)
+	return nil
 }
 
 var backupRunCmd = &cobra.Command{

@@ -23,16 +23,51 @@ func init() {
 	serverCmd.AddCommand(
 		serverAddCmd, serverCreateCmd, serverListCmd, serverInfoCmd,
 		serverSSHCmd, serverRunCmd, serverStatusCmd, serverRebootCmd, serverDeleteCmd,
+		serverSetupCmd,
 	)
 }
 
-var serverAddCmd = &cobra.Command{
-	Use:   "add <name> <user>@<host>",
-	Short: "Import an existing server (generic VPS) into ServerOps",
-	Args:  cobra.ExactArgs(2),
+// serverSetupCmd is the beginner-friendly "make my server ready" command.
+var serverSetupCmd = &cobra.Command{
+	Use:   "setup [name]",
+	Short: "Set up a server: updates, hardening, firewall, Docker (idempotent)",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		name := args[0]
-		user, host, err := parseUserHost(args[1])
+		serverName := resolveServerName(oneArg(args))
+		recipeName, _ := cmd.Flags().GetString("recipe")
+		if recipeName == "" {
+			recipeName = "base"
+		}
+		client, _, err := dial(serverName)
+		if err != nil {
+			return err
+		}
+		defer client.Close()
+		return applyRecipe(client, serverName, recipeName, map[string]string{})
+	},
+}
+
+var serverAddCmd = &cobra.Command{
+	Use:   "add [name] [user@host]",
+	Short: "Import an existing server (generic VPS) into ServerOps",
+	Args:  cobra.RangeArgs(0, 2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		name := oneArg(args)
+		userHost := oneArg(args[1:])
+		// beginner-friendly prompts when args are missing
+		if userHost == "" {
+			userHost = ui.Prompt("Server as user@host (e.g. root@1.2.3.4)", "")
+		}
+		if userHost == "" {
+			return fmt.Errorf("usage: sastoops server add <name> <user>@<host>  (or run: sastoops wizard)")
+		}
+		if name == "" {
+			name = ui.Prompt("Name for this server", strings.SplitN(userHost, "@", 2)[1])
+		}
+		if name == "" {
+			name = strings.SplitN(userHost, "@", 2)[1]
+		}
+		user, host, err := parseUserHost(userHost)
 		if err != nil {
 			return err
 		}
@@ -437,5 +472,6 @@ func init() {
 	sc.String("ssh-key", "", "provider SSH key name/id")
 	sc.Bool("setup", false, "run base setup automatically after creation")
 	serverRebootCmd.Flags().Bool("provider", false, "reboot via provider API instead of SSH")
+	serverSetupCmd.Flags().String("recipe", "base", "recipe to apply (base, light, production)")
 	_ = os.Getenv
 }

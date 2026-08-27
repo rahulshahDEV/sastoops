@@ -49,9 +49,9 @@ backup:
   databases:
     - type: mariadb
       container: appwrite-mariadb
-      user: "{{.Env "DB_USER"}}"
+      user: '{{Env "DB_USER"}}'
       password_ref: DB_PASSWORD
-      db: "{{.Env "DB_DATABASE"}}"
+      db: '{{Env "DB_DATABASE"}}'
       name: appwrite
   resources:
     - type: volume

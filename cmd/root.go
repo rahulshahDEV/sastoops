@@ -36,11 +36,29 @@ ServerOps Monitor   CPU / RAM / disk / network / health
 ServerOps Registry  one-command app installs (app list, app install)`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
+	Run: func(cmd *cobra.Command, args []string) {
+		welcomeMenu()
+	},
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		if G.Debug {
 			ui.Info("debug mode on")
 		}
 	},
+}
+
+// welcomeMenu is shown when sastoops runs with no subcommand — beginner-first.
+func welcomeMenu() {
+	fmt.Printf("\n%s\n", ui.BoldS("sastoops — SastoHost ServerOps"))
+	fmt.Printf("%s\n\n", ui.DimS("New here? Start with the guided setup:"))
+	fmt.Printf("  %s  sastoops wizard\n\n", ui.GreenS("→"))
+	fmt.Printf("%s\n", ui.BoldS("Common commands"))
+	fmt.Printf("  sastoops self                    register the machine you are on\n")
+	fmt.Printf("  sastoops server list             show your servers\n")
+	fmt.Printf("  sastoops server setup <name>     harden + Docker\n")
+	fmt.Printf("  sastoops app install             pick an app interactively\n")
+	fmt.Printf("  sastoops status <name>           everything at a glance\n")
+	fmt.Printf("  sastoops doctor                  check your setup\n")
+	fmt.Printf("\n%s\n", ui.DimS("Run 'sastoops --help' for the full command list."))
 }
 
 func init() {
@@ -66,10 +84,16 @@ func getConfig() (*config.Config, error) {
 	return config.Load(G.ConfigPath)
 }
 
-// dial resolves a server (positional or --server) and opens SSH.
+// dial resolves a server (positional, --server, or the only one configured) and opens SSH.
 func dial(name string) (*ssh.Client, *config.Server, error) {
 	if name == "" {
 		name = G.Server
+	}
+	if name == "" {
+		name = autoServerName()
+	}
+	if name == "" {
+		return nil, nil, fmt.Errorf("no server given — run: sastoops wizard  (or: sastoops self)")
 	}
 	c, err := getConfig()
 	if err != nil {
@@ -90,7 +114,47 @@ func resolveServerName(arg string) string {
 	if arg != "" {
 		return arg
 	}
-	return G.Server
+	if G.Server != "" {
+		return G.Server
+	}
+	if n := autoServerName(); n != "" {
+		return n
+	}
+	return ""
+}
+
+// autoServerName returns the only configured server, if there is exactly one.
+func autoServerName() string {
+	c, err := getConfig()
+	if err != nil {
+		return ""
+	}
+	if len(c.Servers) == 1 {
+		for n := range c.Servers {
+			return n
+		}
+	}
+	return ""
+}
+
+// promptServerName lets the user pick a server interactively (TTY only).
+func promptServerName() (string, error) {
+	c, err := config.LoadOrNew(G.ConfigPath)
+	if err != nil {
+		return "", err
+	}
+	if len(c.Servers) == 0 {
+		return "", fmt.Errorf("no servers configured — run: sastoops wizard  (or: sastoops self / sastoops server add <name> user@host)")
+	}
+	names := ui.SortedKeys(c.Servers)
+	if len(names) == 1 {
+		return names[0], nil
+	}
+	choice := ui.Select("Which server?", names)
+	if choice < 0 {
+		return "", nil
+	}
+	return names[choice], nil
 }
 
 var versionCmd = &cobra.Command{
@@ -108,5 +172,5 @@ var versionCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(versionCmd)
-	rootCmd.AddCommand(serverCmd, recipeCmd, appCmd, backupCmd, dockerCmd, secureCmd, monitorCmd, statusCmd, healthCmd, dnsCmd)
+	rootCmd.AddCommand(serverCmd, recipeCmd, appCmd, backupCmd, dockerCmd, secureCmd, monitorCmd, statusCmd, healthCmd, dnsCmd, wizardCmd, doctorCmd)
 }

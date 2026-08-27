@@ -18,6 +18,16 @@ That's it — single ~9MB static binary, no Python/Node/Docker/runtime needed on
 
 ## Quick start
 
+**Easiest path (beginner-friendly, fully guided):**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/rahulshahDEV/sastoops/main/scripts/install.sh | sh
+sastoops wizard          # guided: connect server -> harden -> install app -> backups
+sastoops doctor          # anytime: check your setup, see exactly what to fix
+```
+
+Or step by step:
+
 ```bash
 # 1. On a fresh VPS — register the machine you're on (auto-detects IP/user/key)
 sastoops self
@@ -25,16 +35,20 @@ sastoops self
 # 2. Harden it + install Docker (idempotent, safe to re-run; --check to dry-run)
 sastoops server setup my-vps
 
-# 3. Install apps
+# 3. Install apps (no args = interactive picker)
 sastoops app install n8n my-vps --domain n8n.example.com
 sastoops app install minecraft my-vps --set memory=1G
 
-# 4. Backups -> Wasabi / R2 / B2 (restic, encrypted)
-sastoops backup setup my-vps --provider wasabi --bucket sastoops-backups --key-id AKIA... --secret ...
+# 4. Backups -> Wasabi / R2 / B2 (restic, encrypted; prompts fill in missing flags)
+sastoops backup setup my-vps --provider wasabi --bucket sastoops-backups
 
 # 5. Check everything
 sastoops status my-vps
 ```
+
+Tips: with a single server configured, you can omit the server name everywhere
+(`sastoops status`). Bare `sastoops` shows a menu. `sastoops server setup` is
+the same as `sastoops recipe apply base`.
 
 ## Small VPS friendly
 
@@ -107,9 +121,12 @@ sastoops server ssh app-prod
 
 ## Development
 
+All tests live in [`test/`](test/) — unit tests plus black-box CLI tests that
+run the real binary and round-trip against an in-process SSH server.
+
 ```bash
 make build      # build ./bin/sastoops
-make test       # run unit tests
+make test       # run the full test suite
 make lint       # go vet + gofmt check
 make release    # cross-compile linux/darwin/windows × amd64/arm64
 ```
@@ -118,8 +135,8 @@ make release    # cross-compile linux/darwin/windows × amd64/arm64
 
 See [docs/DESIGN.md](docs/DESIGN.md) — the full technical design (architecture, app/recipe schema, provider abstraction, backup strategy, security model, MVP phases).
 
-Phase 1 (done): config/state/secrets, SSH executor, server mgmt, hardening recipes, docker, app system (n8n, minecraft, appwrite, supabase), backups (restic/rclone), monitor/health, Hetzner provider, Cloudflare DNS.
-Phase 2: DigitalOcean/Vultr/Linode providers, scheduled backups via systemd timers, alerts, server cloning/migration, `--json` contract stabilization.
+Phase 1 (done): config/state/secrets, SSH executor, server mgmt, hardening recipes, docker, app system (n8n, minecraft, appwrite, supabase), backups (restic/rclone), monitor/health, Hetzner provider, Cloudflare DNS, guided wizard + doctor.
+Phase 2: DigitalOcean/Vultr/Linode providers, alerts, server cloning/migration, `--json` contract stabilization.
 Phase 3: web UI/API, teams/RBAC, SastoHost cloud integration.
 
 ## License

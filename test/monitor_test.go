@@ -1,13 +1,15 @@
-package monitor
+package test
 
 import (
 	"strings"
 	"testing"
+
+	"github.com/rahulshahDEV/sastoops/internal/monitor"
 )
 
-type fakeClient struct{ out string }
+type fakeCollector struct{ out string }
 
-func (f fakeClient) Output(cmd string) (string, error) { return f.out, nil }
+func (f fakeCollector) Output(cmd string) (string, error) { return f.out, nil }
 
 const sample = `web-01
 Ubuntu 24.04.1 LTS
@@ -20,7 +22,7 @@ Ubuntu 24.04.1 LTS
 38`
 
 func TestCollectParses(t *testing.T) {
-	st, err := Collect(fakeClient{out: sample})
+	st, err := monitor.Collect(fakeCollector{out: sample})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,14 +50,14 @@ func TestCollectParses(t *testing.T) {
 }
 
 func TestMemPct(t *testing.T) {
-	st := &Stats{MemUsed: 800, MemTotal: 1600}
+	st := &monitor.Stats{MemUsed: 800, MemTotal: 1600}
 	if st.MemPct() != 50 {
 		t.Errorf("mem pct: %f", st.MemPct())
 	}
 }
 
 func TestHealthThresholds(t *testing.T) {
-	st := &Stats{DiskUsed: 90, DiskTotal: 100, MemUsed: 50, MemTotal: 100, Load1: 0.1}
+	st := &monitor.Stats{DiskUsed: 90, DiskTotal: 100, MemUsed: 50, MemTotal: 100, Load1: 0.1}
 	ok, problems := st.Health(80, 90)
 	if ok || len(problems) == 0 {
 		t.Errorf("expected disk problem: %v %v", ok, problems)
@@ -66,7 +68,7 @@ func TestHealthThresholds(t *testing.T) {
 }
 
 func TestCollectBadOutput(t *testing.T) {
-	_, err := Collect(fakeClient{out: "too short"})
+	_, err := monitor.Collect(fakeCollector{out: "too short"})
 	if err == nil {
 		t.Error("expected error on short output")
 	}

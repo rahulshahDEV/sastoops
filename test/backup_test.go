@@ -1,16 +1,17 @@
-package backup
+package test
 
 import (
 	"strings"
 	"testing"
+
+	"github.com/rahulshahDEV/sastoops/internal/backup"
 )
 
-type fakeClient struct {
+type fakeRemote struct {
 	outputs map[string]string
-	puts    [][]byte
 }
 
-func (f *fakeClient) Output(cmd string) (string, error) {
+func (f *fakeRemote) Output(cmd string) (string, error) {
 	for k, v := range f.outputs {
 		if strings.Contains(cmd, k) {
 			return v, nil
@@ -18,12 +19,8 @@ func (f *fakeClient) Output(cmd string) (string, error) {
 	}
 	return "", nil
 }
-func (f *fakeClient) Put(data []byte, path, mode string) error {
-	f.puts = append(f.puts, data)
-	return nil
-}
-func (f *fakeClient) ReadFile(path string) (string, error) { return "", nil }
-func (f *fakeClient) Exists(path string) (bool, error)     { return false, nil }
+func (f *fakeRemote) Put(data []byte, path, mode string) error { return nil }
+func (f *fakeRemote) ReadFile(path string) (string, error)     { return "", nil }
 
 func TestEndpoints(t *testing.T) {
 	cases := map[string]string{
@@ -33,22 +30,22 @@ func TestEndpoints(t *testing.T) {
 		"other":  "",
 	}
 	for provider, want := range cases {
-		if got := Endpoint(provider); got != want {
+		if got := backup.Endpoint(provider); got != want {
 			t.Errorf("%s: got %s want %s", provider, got, want)
 		}
 	}
 }
 
 func TestRetentionFlags(t *testing.T) {
-	j := JobSpec{KeepLast: 3, KeepDaily: 7, KeepMonthly: 2}
-	out := RetentionFlags(j)
+	j := backup.JobSpec{KeepLast: 3, KeepDaily: 7, KeepMonthly: 2}
+	out := backup.RetentionFlags(j)
 	if !strings.Contains(out, "--keep-last 3") || !strings.Contains(out, "--keep-daily 7") || !strings.Contains(out, "--keep-monthly 2") {
 		t.Errorf("bad retention flags: %s", out)
 	}
 }
 
 func TestRenderRcloneConfig(t *testing.T) {
-	cfg := RenderRcloneConfig("wasabi", "wasabi", "keyid", "secret")
+	cfg := backup.RenderRcloneConfig("wasabi", "wasabi", "keyid", "secret")
 	for _, want := range []string{"[wasabi]", "provider = Wasabi", "access_key_id = keyid", "endpoint = https://s3.wasabisys.com"} {
 		if !strings.Contains(cfg, want) {
 			t.Errorf("rclone config missing %q:\n%s", want, cfg)
@@ -61,8 +58,8 @@ func TestResticSnapshotsParse(t *testing.T) {
   {"id":"a1b2c3d4e5f6","time":"2026-08-27T10:00:00Z","tags":["daily"],"paths":["/var/lib/serverops"]},
   {"id":"f6e5d4c3b2a1","time":"2026-08-26T10:00:00Z","tags":null}
 ]`
-	fc := &fakeClient{outputs: map[string]string{"snapshots": json}}
-	snaps, err := ResticSnapshots(fc, "s3:repo")
+	fc := &fakeRemote{outputs: map[string]string{"snapshots": json}}
+	snaps, err := backup.ResticSnapshots(fc, "s3:repo")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,20 +75,20 @@ func TestResticSnapshotsParse(t *testing.T) {
 }
 
 func TestDBDump(t *testing.T) {
-	cmd := DBDump("/var/lib/serverops/compose/n8n", "postgres", "n8n-db", "n8n", "pw123", "n8n", "/tmp/n8n.sql")
+	cmd := backup.DBDump("/var/lib/serverops/compose/n8n", "postgres", "n8n-db", "n8n", "pw123", "n8n", "/tmp/n8n.sql")
 	for _, want := range []string{"pg_dump", "-U n8n", "-d n8n", "/tmp/n8n.sql", "compose exec -T n8n-db"} {
 		if !strings.Contains(cmd, want) {
 			t.Errorf("pg dump missing %q: %s", want, cmd)
 		}
 	}
-	cmd2 := DBDump("/x", "mariadb", "mc", "u", "p", "db", "/d.sql")
+	cmd2 := backup.DBDump("/x", "mariadb", "mc", "u", "p", "db", "/d.sql")
 	if !strings.Contains(cmd2, "mysqldump") {
 		t.Errorf("mariadb dump wrong: %s", cmd2)
 	}
 }
 
 func TestRenderResticEnv(t *testing.T) {
-	env := RenderResticEnv("k", "s", "us-east-1")
+	env := backup.RenderResticEnv("k", "s", "us-east-1")
 	if !strings.Contains(env, "RESTIC_PASSWORD=") || !strings.Contains(env, "AWS_ACCESS_KEY_ID=k") {
 		t.Errorf("env incomplete: %s", env)
 	}

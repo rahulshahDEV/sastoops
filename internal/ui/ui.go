@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
+
+	"golang.org/x/term"
 )
 
 const (
@@ -133,11 +136,62 @@ func Confirm(question string, autoYes bool) bool {
 	if autoYes {
 		return true
 	}
+	if !IsTTY() {
+		return false
+	}
 	fmt.Fprintf(os.Stderr, "%s %s [y/N]: ", YellowS("?"), question)
 	reader := bufio.NewReader(os.Stdin)
 	line, _ := reader.ReadString('\n')
 	line = strings.ToLower(strings.TrimSpace(line))
 	return line == "y" || line == "yes"
+}
+
+// IsTTY reports whether stdin is an interactive terminal.
+func IsTTY() bool {
+	return term.IsTerminal(int(os.Stdin.Fd()))
+}
+
+// Prompt asks for a string; returns def on empty input or non-TTY.
+func Prompt(question, def string) string {
+	if !IsTTY() {
+		return def
+	}
+	suffix := ""
+	if def != "" {
+		suffix = fmt.Sprintf(" [%s]", def)
+	}
+	fmt.Fprintf(os.Stderr, "%s %s%s: ", YellowS("?"), question, suffix)
+	reader := bufio.NewReader(os.Stdin)
+	line, _ := reader.ReadString('\n')
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return def
+	}
+	return line
+}
+
+// Select shows a numbered menu; returns the chosen index or -1 if not a TTY.
+func Select(title string, options []string) int {
+	if !IsTTY() {
+		return -1
+	}
+	fmt.Fprintf(os.Stderr, "\n%s\n", BoldS(title))
+	for i, o := range options {
+		fmt.Fprintf(os.Stderr, "  %s %s\n", CyanS(fmt.Sprintf("%2d.", i+1)), o)
+	}
+	fmt.Fprintf(os.Stderr, "  %s %s\n", DimS(" 0."), "cancel")
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		fmt.Fprintf(os.Stderr, "%s choose [0-%d]: ", YellowS("?"), len(options))
+		line, _ := reader.ReadString('\n')
+		n, err := strconv.Atoi(strings.TrimSpace(line))
+		if err == nil && n >= 0 && n <= len(options) {
+			if n == 0 {
+				return -1
+			}
+			return n - 1
+		}
+	}
 }
 
 // Spinner is a minimal TTY spinner; degrades to dots on non-TTY.

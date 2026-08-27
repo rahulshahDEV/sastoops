@@ -52,52 +52,59 @@ Detects user, SSH key and public IP automatically, so on any fresh VPS:
 		}
 		region, _ := cmd.Flags().GetString("region")
 		provider, _ := cmd.Flags().GetString("provider")
-
-		ip := publicIP()
-		if ip == "" {
-			ip = localIP()
-		}
-		if ip == "" {
-			ui.Warn("could not detect public IP — using 127.0.0.1")
-			ip = "127.0.0.1"
-		}
-
-		c, err := config.LoadOrNew(G.ConfigPath)
-		if err != nil {
-			return err
-		}
-		if _, exists := c.Servers[name]; exists {
-			return fmt.Errorf("server %q already exists — pick another name or remove it first", name)
-		}
-		c.Servers[name] = &config.Server{
-			Host:     ip,
-			Port:     port,
-			User:     user,
-			KeyPath:  key,
-			Region:   region,
-			Provider: provider,
-		}
-		if err := c.Save(G.ConfigPath); err != nil {
-			return err
-		}
-		ui.Ok("registered this machine as server %q (%s@%s)", name, user, ip)
-
-		if test, _ := cmd.Flags().GetBool("test"); test {
-			client, _, err := dial(name)
-			if err != nil {
-				ui.Warn("SSH to self failed (is sshd running and your key authorized?): %v", err)
-				ui.Info("you can still manage this machine later from another machine: sastoops ssh %s", name)
-			} else {
-				client.Close()
-				ui.Ok("SSH connection to self verified")
-			}
-		}
-		ui.Info("next:")
-		fmt.Printf("  sastoops server setup %s     # harden + Docker (idempotent)\n", name)
-		fmt.Printf("  sastoops app install n8n %s  # install an app\n", name)
-		fmt.Printf("  sastoops backup setup %s     # enable encrypted backups\n", name)
-		return nil
+		test, _ := cmd.Flags().GetBool("test")
+		return registerSelf(name, user, port, key, region, provider, test)
 	},
+}
+
+// registerSelf saves a Server record pointing at this machine and verifies SSH.
+func registerSelf(name, user string, port int, key, region, provider string, test bool) error {
+	ip := publicIP()
+	if ip == "" {
+		ip = localIP()
+	}
+	if ip == "" {
+		ui.Warn("could not detect public IP — using 127.0.0.1")
+		ip = "127.0.0.1"
+	}
+	if provider == "" {
+		provider = "generic"
+	}
+	c, err := config.LoadOrNew(G.ConfigPath)
+	if err != nil {
+		return err
+	}
+	if _, exists := c.Servers[name]; exists {
+		return fmt.Errorf("server %q already exists — pick another name or remove it first", name)
+	}
+	c.Servers[name] = &config.Server{
+		Host:     ip,
+		Port:     port,
+		User:     user,
+		KeyPath:  key,
+		Region:   region,
+		Provider: provider,
+	}
+	if err := c.Save(G.ConfigPath); err != nil {
+		return err
+	}
+	ui.Ok("registered this machine as server %q (%s@%s)", name, user, ip)
+
+	if test {
+		client, _, err := dial(name)
+		if err != nil {
+			ui.Warn("SSH to self failed (is sshd running and your key authorized?): %v", err)
+			ui.Info("you can still manage this machine later from another machine: sastoops ssh %s", name)
+		} else {
+			client.Close()
+			ui.Ok("SSH connection to self verified")
+		}
+	}
+	ui.Info("next:")
+	fmt.Printf("  sastoops server setup %s     # harden + Docker (idempotent)\n", name)
+	fmt.Printf("  sastoops app install n8n %s  # install an app\n", name)
+	fmt.Printf("  sastoops backup setup %s     # enable encrypted backups\n", name)
+	return nil
 }
 
 func defaultSSHKey() string {

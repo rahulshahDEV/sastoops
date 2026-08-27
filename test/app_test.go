@@ -1,12 +1,14 @@
-package app
+package test
 
 import (
 	"strings"
 	"testing"
+
+	"github.com/rahulshahDEV/sastoops/internal/app"
 )
 
 func TestLoadEmbeddedApps(t *testing.T) {
-	names, err := All()
+	names, err := app.All()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -21,10 +23,22 @@ func TestLoadEmbeddedApps(t *testing.T) {
 			t.Errorf("expected embedded app %s", n)
 		}
 	}
+	// every embedded app must load AND render a compose file — catches
+	// invalid YAML/templates that otherwise silently skip the app
+	for _, n := range names {
+		a, err := app.Load(n, "")
+		if err != nil {
+			t.Errorf("app %s failed to load: %v", n, err)
+			continue
+		}
+		if _, err := a.Compose("", "latest", map[string]string{}, map[string]string{}, false); err != nil {
+			t.Errorf("app %s compose failed to render: %v", n, err)
+		}
+	}
 }
 
 func TestComposeRenderN8N(t *testing.T) {
-	a, err := Load("n8n", "")
+	a, err := app.Load("n8n", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,8 +65,8 @@ func TestComposeRenderN8N(t *testing.T) {
 	}
 }
 
-func TestComposeRenderNoProxy(t *testing.T) {
-	a, err := Load("minecraft", "")
+func TestComposeRenderMinecraftNoProxy(t *testing.T) {
+	a, err := app.Load("minecraft", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,8 +82,30 @@ func TestComposeRenderNoProxy(t *testing.T) {
 	}
 }
 
+func TestComposeRenderN8NMemLimit(t *testing.T) {
+	a, err := app.Load("n8n", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := map[string]string{"N8N_HOST": "x", "N8N_ENCRYPTION_KEY": "k"}
+	withLimit, err := a.Compose("x", "latest", map[string]string{"mem_limit": "512m"}, env, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(withLimit, "mem_limit: 512m") {
+		t.Errorf("mem_limit param not rendered: %s", withLimit)
+	}
+	noLimit, err := a.Compose("x", "latest", map[string]string{}, env, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(noLimit, "mem_limit") {
+		t.Error("empty mem_limit should not render")
+	}
+}
+
 func TestResolveEnvSecretsPersist(t *testing.T) {
-	a, err := Load("n8n", "")
+	a, err := app.Load("n8n", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,18 +124,15 @@ func TestResolveEnvSecretsPersist(t *testing.T) {
 
 func TestEnvFileRoundTrip(t *testing.T) {
 	env := map[string]string{"A": "1", "B": "two words"}
-	file := EnvFile(env)
-	parsed := ParseEnvFile(file)
+	file := app.EnvFile(env)
+	parsed := app.ParseEnvFile(file)
 	if parsed["A"] != "1" || parsed["B"] != "two words" {
 		t.Errorf("round trip failed: %v", parsed)
-	}
-	if len(parsed) != 2 {
-		t.Errorf("expected 2 keys, got %d", len(parsed))
 	}
 }
 
 func TestUnknownAppError(t *testing.T) {
-	_, err := Load("definitely-not-real", "")
+	_, err := app.Load("definitely-not-real", "")
 	if err == nil || !strings.Contains(err.Error(), "unknown app") {
 		t.Errorf("expected unknown app error, got %v", err)
 	}

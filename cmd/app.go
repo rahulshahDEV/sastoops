@@ -145,16 +145,46 @@ var appSearchCmd = &cobra.Command{
 }
 
 var appInstallCmd = &cobra.Command{
-	Use:   "install <app> [name]",
+	Use:   "install [app] [name]",
 	Short: "Install an app on a server via Docker Compose",
 	Args:  cobra.MaximumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		aName := args[0]
+		aName := oneArg(args)
 		serverName := resolveServerName(oneArg(args[1:]))
 		domain, _ := cmd.Flags().GetString("domain")
 		version, _ := cmd.Flags().GetString("version")
 		portOverride, _ := cmd.Flags().GetInt("port")
 		sets, _ := cmd.Flags().GetStringSlice("set")
+
+		// beginner-friendly pickers when args are missing
+		if aName == "" {
+			names, err := app.All()
+			if err != nil {
+				return err
+			}
+			labels := make([]string, 0, len(names))
+			for _, n := range names {
+				if a, err := app.Load(n, appOverlayDir()); err == nil {
+					labels = append(labels, fmt.Sprintf("%s — %s", n, a.Description))
+				} else {
+					labels = append(labels, n)
+				}
+			}
+			choice := ui.Select("Which app do you want to install?", labels)
+			if choice < 0 {
+				return fmt.Errorf("no app selected")
+			}
+			aName = names[choice]
+		}
+		if serverName == "" {
+			serverName, err := promptServerName()
+			if err != nil {
+				return err
+			}
+			if serverName == "" {
+				return fmt.Errorf("no server selected — run: sastoops wizard")
+			}
+		}
 
 		a, err := app.Load(aName, appOverlayDir())
 		if err != nil {
@@ -168,6 +198,20 @@ var appInstallCmd = &cobra.Command{
 		ui.Ok("connected to %s", serverName)
 		return installApp(client, serverName, a, domain, version, portOverride, sets)
 	},
+}
+
+// installAppWizard installs an app with defaults (used by the wizard).
+func installAppWizard(aName, serverName, domain string) error {
+	a, err := app.Load(aName, appOverlayDir())
+	if err != nil {
+		return err
+	}
+	client, _, err := dial(serverName)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	return installApp(client, serverName, a, domain, "", 0, nil)
 }
 
 func installApp(client *sshClient, serverName string, a *app.App, domain, version string, portOverride int, sets []string) error {
@@ -184,14 +228,20 @@ func installApp(client *sshClient, serverName string, a *app.App, domain, versio
 		}
 	}
 
-	// requirements check
+	// dry-run: report what would happen without touching the server
+	dir := appDir(a)
+	if G.Check {
+		ui.Step("would write %s/compose.yaml and .env, then: docker compose up -d --wait", dir)
+		return nil
+	}
+
+	// requirements check (skipped in check mode so dry-runs work anywhere)
 	ui.Step("checking requirements")
 	if err := checkRequirements(client, a); err != nil {
 		return err
 	}
 	ui.Ok("requirements ok")
 
-	dir := appDir(a)
 	envFile := dir + "/.env"
 
 	// load existing env (secrets survive re-install)
@@ -204,11 +254,6 @@ func installApp(client *sshClient, serverName string, a *app.App, domain, versio
 	compose, err := a.Compose(domain, version, params, env, domain != "")
 	if err != nil {
 		return err
-	}
-
-	if G.Check {
-		ui.Step("would write %s/compose.yaml and .env, then: docker compose up -d --wait", dir)
-		return nil
 	}
 
 	ui.Step("writing application files")

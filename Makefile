@@ -6,6 +6,7 @@ VERSION := $(shell grep -m1 'const Version' internal/config/config.go | sed 's/.
 build:
 	go build -trimpath -ldflags="-s -w" -o bin/$(BINARY) .
 
+# all tests live in ./test (unit + black-box CLI + real SSH round trips)
 test:
 	go test ./...
 
